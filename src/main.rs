@@ -134,7 +134,7 @@ fn fcfs(
     _config: &Config,
     _rr_elapsed: &mut u64,
 ) -> Option<usize> {
-    // YOUR IMPLEMENTATION GOES HERE
+    Some(ci)
 }
 
 fn sjf(
@@ -144,7 +144,16 @@ fn sjf(
     _config: &Config,
     _rr_elapsed: &mut u64,
 ) -> Option<usize> {
-    // YOUR IMPLEMENTATION GOES HERE
+    if queue.iter().any(|&i| procs[i].remaining < procs[ci].remaining) 
+    {
+        preempt(procs[ci].pid.unwrap());
+        queue.push(ci);
+        None
+    } 
+    else 
+    {
+        Some(ci)
+    }
 }
 
 fn rr(
@@ -154,7 +163,18 @@ fn rr(
     config: &Config,
     rr_elapsed: &mut u64,
 ) -> Option<usize> {
-    // YOUR IMPLEMENTATION GOES HERE
+    let quantum = config.quantum.expect("Round Robin requires a quantum");
+
+    if *rr_elapsed >= quantum && !queue.is_empty() 
+    {
+        preempt(procs[ci].pid.unwrap());
+        queue.push(ci);
+        None
+    } 
+    else 
+    {
+    Some(ci)
+    }
 }
 
 fn run_scheduler(config: &Config, out: &mut File) {
