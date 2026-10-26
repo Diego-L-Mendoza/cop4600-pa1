@@ -165,16 +165,17 @@ fn rr(
 ) -> Option<usize> {
     let quantum = config.quantum.expect("Round Robin requires a quantum");
 
-    if *rr_elapsed >= quantum && !queue.is_empty() 
-    {
+if *rr_elapsed >= quantum {
+    if !queue.is_empty() {
         preempt(procs[ci].pid.unwrap());
         queue.push(ci);
-        None
-    } 
-    else 
-    {
-    Some(ci)
+        return None;
     }
+
+    *rr_elapsed = 0;
+}
+
+Some(ci)
 }
 
 fn run_scheduler(config: &Config, out: &mut File) {
