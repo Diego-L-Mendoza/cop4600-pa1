@@ -23,16 +23,27 @@ use std::time::Instant;
 /// fork, but the child may not have reached `execvp` yet. Think through
 /// whether that matters for this assignment's correctness requirements,
 /// and be ready to explain your reasoning either way.
+
 pub fn spawn_paused(workload_path: &str, ticks: u64) -> Pid {
     match unsafe { fork() }.expect("fork failed") {
         ForkResult::Parent { child } => {
-            kill(child, Signal::SIGSTOP).expect("failed to stop child");
+            loop {
+                match waitpid(child, Some(WaitPidFlag::WUNTRACED)) {
+                    Ok(WaitStatus::Stopped(_, Signal::SIGSTOP)) => break,
+                    Err(nix::errno::Errno::EINTR) => continue,
+                    status => panic!("unexpected child startup status: {:?}", status),
+                }
+            }
             child
         }
         ForkResult::Child => {
+            kill(nix::unistd::getpid(), Signal::SIGSTOP)
+                .expect("failed to stop child");
+
             let prog = CString::new(workload_path).unwrap();
             let arg0 = prog.clone();
             let arg1 = CString::new(ticks.to_string()).unwrap();
+
             execvp(&prog, &[arg0, arg1]).expect("execvp failed");
             unreachable!("execvp does not return on success");
         }
@@ -72,9 +83,15 @@ pub fn terminate(pid: Pid) {
 /// during cleanup, and to confirm a selected process's completion before
 /// you log it as finished.
 pub fn reap_blocking(pid: Pid) {
-    let _ = waitpid(pid, None);
+    loop {
+        match waitpid(pid, None) {
+            Ok(WaitStatus::Exited(_, _)) => break,
+            Ok(WaitStatus::Signaled(_, _, _)) => break,
+            Err(nix::errno::Errno::EINTR) => continue,
+            result => panic!("failed to reap child {}: {:?}", pid, result),
+        }
+    }
 }
-
 /// Milliseconds elapsed since a fixed reference point you establish at
 /// program start. Use this -- not the input file's tick numbers -- to
 /// compute every event time you print in your output.
