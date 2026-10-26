@@ -322,12 +322,13 @@ fn run_scheduler(config: &Config, out: &mut File) {
 
     // Cleanup: kill off anything that didn't finish within runfor.
     for p in &procs {
-        if !p.finished {
-            if let Some(pid) = p.pid {
-                terminate(pid);
-            }
+    if !p.finished {
+        if let Some(pid) = p.pid {
+            terminate(pid);
+            reap_blocking(pid);
         }
     }
+}
 }
 
 fn main() {
