@@ -36,7 +36,7 @@ struct Config {
 }
 
 fn parse_input(path: &str) -> Result<Config, String> {
-    let content = fs::read_to_string(path).map_err(|e| format!("cannot read input file: {e}"))?;
+    let content = fs::read_to_string(path).map_err(|e| format!("Usage: scheduler-gpt <input file>"))?;
 
     let mut process_count = None;
     let mut runfor = None;
