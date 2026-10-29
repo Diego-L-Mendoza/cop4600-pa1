@@ -233,7 +233,7 @@ fn run_scheduler(config: &Config, out: &mut File) {
         // 2. Detect completion of the currently running process.
         if let Some(ci) = current {
             if procs[ci].remaining == 0 {
-                reap_blocking(procs[ci].pid.unwrap());
+                reap_blocking(procs[ci].pid.unwrap()).expect("failed to reap finished child");
                 procs[ci].finished = true;
                 let ft = real_tick(&epoch);
                 procs[ci].finish_tick = Some(ft);
@@ -283,7 +283,7 @@ fn run_scheduler(config: &Config, out: &mut File) {
     // Final completion check for a process finishing exactly at runfor.
     if let Some(ci) = current {
         if procs[ci].remaining == 0 {
-            reap_blocking(procs[ci].pid.unwrap());
+            reap_blocking(procs[ci].pid.unwrap()).expect("failed to reap finished child");
             procs[ci].finished = true;
             procs[ci].finish_tick = Some(config.runfor);
             lines.push(format!(
@@ -323,13 +323,14 @@ fn run_scheduler(config: &Config, out: &mut File) {
 
     // Cleanup: kill off anything that didn't finish within runfor.
     for p in &procs {
-    if !p.finished {
-        if let Some(pid) = p.pid {
-            terminate(pid);
-            reap_blocking(pid);
+        if !p.finished {
+            if let Some(pid) = p.pid {
+                terminate(pid);
+                // Reap the killed child to avoid zombie state
+                let _ = reap_blocking(pid);
+            }
         }
     }
-}
 }
 
 fn main() {
