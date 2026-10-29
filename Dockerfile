@@ -18,6 +18,7 @@ FROM rust:1.82-slim-bookworm
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        procps \
         build-essential \
         strace \
         python3 \
