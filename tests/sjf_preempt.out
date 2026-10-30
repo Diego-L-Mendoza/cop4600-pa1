@@ -1,0 +1,20 @@
+3 processes
+Using preemptive Shortest Job First
+Time   0 : A arrived
+Time   0 : A selected (burst   6)
+Time   1 : B arrived
+Time   1 : B selected (burst   2)
+Time   2 : C arrived
+Time   3 : B finished
+Time   3 : C selected (burst   1)
+Time   4 : C finished
+Time   4 : A selected (burst   5)
+Time   9 : A finished
+Time   9 : Idle
+Time  10 : Idle
+Time  11 : Idle
+Finished at time  12
+
+A wait   3 turnaround   9  response 0
+B wait   0 turnaround   2  response 0
+C wait   1 turnaround   2  response 1
