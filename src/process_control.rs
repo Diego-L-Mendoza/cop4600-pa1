@@ -24,14 +24,17 @@ use std::time::Instant;
 /// fork, but the child may not have reached `execvp` yet. Think through
 /// whether that matters for this assignment's correctness requirements,
 /// and be ready to explain your reasoning either way.
-
-// Stop/resume race at spawn
 pub fn spawn_paused(workload_path: &str, ticks: u64) -> Pid {
     match unsafe { fork() }.expect("fork failed") {
         ForkResult::Parent { child } => {
+            /*  - bug #1 fix: instead of the parent sending SIGSTOP right after fork, the child
+                stops itself before exec and we wait here until we see that it's stopped
+                - this way the workload can't start running before the scheduler selects it
+            */
             loop {
                 match waitpid(child, Some(WaitPidFlag::WUNTRACED)) {
                     Ok(WaitStatus::Stopped(_, Signal::SIGSTOP)) => break,
+                    // EINTR just means a signal interrupted the wait, so try again
                     Err(Errno::EINTR) => continue,
                     Ok(status) => panic!("child did not reach startup stop: {status:?}"),
                     Err(err) => panic!("waiting for startup stop failed: {err}"),
@@ -40,6 +43,7 @@ pub fn spawn_paused(workload_path: &str, ticks: u64) -> Pid {
             child
         }
         ForkResult::Child => {
+            // stop ourselves before exec so no workload code runs until we get SIGCONT
             raise(Signal::SIGSTOP).expect("Child self stop failed");
 
             let prog = CString::new(workload_path).unwrap();
@@ -84,6 +88,8 @@ pub fn terminate(pid: Pid) {
 /// during cleanup, and to confirm a selected process's completion before
 /// you log it as finished.
 pub fn reap_blocking(pid: Pid) -> Result<WaitStatus, Errno> {
+    // bug #3 fix: retry if waitpid gets interrupted (EINTR) instead of returning early and
+    // letting the caller log the process as finished before it actually exits
     loop {
         match waitpid(pid, None) {
             Err(Errno::EINTR) => continue,

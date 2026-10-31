@@ -36,7 +36,8 @@ struct Config {
 }
 
 fn parse_input(path: &str) -> Result<Config, String> {
-    let content = fs::read_to_string(path).map_err(|e| format!("Usage: scheduler-gpt <input file>"))?;
+    let content =
+        fs::read_to_string(path).map_err(|_| "Usage: scheduler-gpt <input file>".to_string())?;
 
     let mut process_count = None;
     let mut runfor = None;
@@ -127,6 +128,7 @@ fn real_tick(epoch: &Instant) -> u64 {
     now_ms(epoch) / TICK_MS
 }
 
+// FCFS is non-preemptive, so the running process always keeps the CPU until it finishes
 fn fcfs(
     ci: usize,
     _queue: &mut Vec<usize>,
@@ -137,6 +139,10 @@ fn fcfs(
     Some(ci)
 }
 
+/*  - preemptive SJF: if anything in the queue has less remaining burst than the running
+    process, stop the running process and put it back in the queue
+    - step 4 in run_scheduler then sorts the queue and picks the shortest job
+*/
 fn sjf(
     ci: usize,
     queue: &mut Vec<usize>,
@@ -144,18 +150,20 @@ fn sjf(
     _config: &Config,
     _rr_elapsed: &mut u64,
 ) -> Option<usize> {
-    if queue.iter().any(|&i| procs[i].remaining < procs[ci].remaining) 
+    // use < instead of <= so a tie doesn't preempt (A keeps running when B arrives in sjf.in)
+    if queue
+        .iter()
+        .any(|&i| procs[i].remaining < procs[ci].remaining)
     {
         preempt(procs[ci].pid.unwrap());
         queue.push(ci);
         None
-    } 
-    else 
-    {
+    } else {
         Some(ci)
     }
 }
 
+// round robin: each process gets `quantum` ticks before it has to give up the CPU
 fn rr(
     ci: usize,
     queue: &mut Vec<usize>,
@@ -165,17 +173,19 @@ fn rr(
 ) -> Option<usize> {
     let quantum = config.quantum.expect("Round Robin requires a quantum");
 
-if *rr_elapsed >= quantum {
-    if !queue.is_empty() {
-        preempt(procs[ci].pid.unwrap());
-        queue.push(ci);
-        return None;
+    if *rr_elapsed >= quantum {
+        // only preempt if another process is waiting, otherwise just keep running
+        if !queue.is_empty() {
+            preempt(procs[ci].pid.unwrap());
+            queue.push(ci);
+            return None;
+        }
+
+        // nobody else is ready, so give the current process a fresh quantum
+        *rr_elapsed = 0;
     }
 
-    *rr_elapsed = 0;
-}
-
-Some(ci)
+    Some(ci)
 }
 
 fn run_scheduler(config: &Config, out: &mut File) {
@@ -233,6 +243,7 @@ fn run_scheduler(config: &Config, out: &mut File) {
         // 2. Detect completion of the currently running process.
         if let Some(ci) = current {
             if procs[ci].remaining == 0 {
+                // wait for the child to actually exit before we log it as finished
                 reap_blocking(procs[ci].pid.unwrap()).expect("failed to reap finished child");
                 procs[ci].finished = true;
                 let ft = real_tick(&epoch);
@@ -326,8 +337,11 @@ fn run_scheduler(config: &Config, out: &mut File) {
         if !p.finished {
             if let Some(pid) = p.pid {
                 terminate(pid);
-                // Reap the killed child to avoid zombie state
-                let _ = reap_blocking(pid);
+                // reap the killed child to avoid zombie state, and print a warning if it fails
+                // instead of silently ignoring it
+                if let Err(err) = reap_blocking(pid) {
+                    eprintln!("warning: failed to reap {} (pid {pid}): {err}", p.spec.name);
+                }
             }
         }
     }
